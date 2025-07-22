@@ -17,7 +17,7 @@ use walkdir::WalkDir;
 // Rust会读取这两个文件的二进制内容，并将其作为常量嵌入到最终的可执行文件中。
 // 路径是相对于 Cargo.toml 所在的根目录。
 const FFMPEG_BYTES: &[u8] = include_bytes!("../resources/ffmpeg");
-const ANALYZER_BYTES: &[u8] = include_bytes!("../resources/ana_aud_analyzer");
+const ANALYZER_BYTES: &[u8] = include_bytes!("../resources/audio-analyzer");
 
 // --- 预编译正则表达式 ---
 lazy_static! {
