@@ -1,0 +1,54 @@
+[package]
+name = "audio_analyzer_ultimate"
+version = "3.0.0"
+edition = "2021"
+authors = ["Audio Analyzer Team"]
+description = "Ultimate Audio Quality Analyzer - Rust + Python Hybrid for macOS ARM64"
+
+[dependencies]
+# 核心依赖
+chrono = { version = "0.4", features = ["serde"] }
+rayon = "1.8"
+regex = "1.10"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+walkdir = "2.4"
+lazy_static = "1.4"
+anyhow = "1.0"
+# tempfile 库可以帮助我们安全地创建临时目录
+tempfile = "3.10.1"
+
+# 命令行和UI
+clap = { version = "4.0", features = ["derive"] }
+indicatif = "0.17"
+colored = "2.0"
+
+# 系统相关
+num_cpus = "1.0"
+
+# macOS ARM64 优化
+[profile.release]
+codegen-units = 1
+lto = true
+panic = "abort"
+opt-level = 3
+
+# 修复：正确的ARM64构建配置
+[target.'cfg(all(target_arch = "aarch64", target_os = "macos"))']
+rustflags = ["-C", "target-cpu=apple-m1"]
+
+[package.metadata.bundle]
+name = "AudioQualityAnalyzer"
+identifier = "com.yourcompany.audioqualityanalyzer" # 使用一个唯一的标识符
+# icon = "resources/icon.icns" # 可选：指定一个应用图标
+resources = ["resources"] # 将整个 resources 文件夹（包含FFmpeg和Python可执行文件）打包进去
+# 将我们编译后的二进制文件（与项目同名）作为资源包含进来
+# 并将我们的脚本作为主执行文件
+machexe = ["run.sh", "target/release/audio-analyzer"]
+
+
+[profile.release-performance]
+inherits = "release"
+lto = "fat"          # 最大化链接时优化
+codegen-units = 1    # 单一代码生成单元以最大化优化机会
+opt-level = 3        # 最高优化级别
