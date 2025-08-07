@@ -1,9 +1,14 @@
 [package]
 name = "audio_analyzer_ultimate"
-version = "3.0.0"
+version = "4.0.0"
 edition = "2021"
 authors = ["Audio Analyzer Team"]
 description = "Ultimate Audio Quality Analyzer - Rust + Python Hybrid for macOS ARM64"
+
+# 定义二进制目标
+[[bin]]
+name = "audio-analyzer"
+path = "src/bin/main.rs"
 
 [dependencies]
 # 核心依赖
@@ -17,6 +22,8 @@ lazy_static = "1.4"
 anyhow = "1.0"
 # tempfile 库可以帮助我们安全地创建临时目录
 tempfile = "3.10.1"
+# TOML 配置文件支持
+toml = "0.8"
 
 # 命令行和UI
 clap = { version = "4.0", features = ["derive"] }
@@ -25,6 +32,16 @@ colored = "2.0"
 
 # 系统相关
 num_cpus = "1.0"
+
+[dev-dependencies]
+# 基准测试
+criterion = { version = "0.5", features = ["html_reports"] }
+# 测试工具
+tempfile = "3.10.1"
+
+[[bench]]
+name = "performance"
+harness = false
 
 # macOS ARM64 优化
 [profile.release]

@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['scripts/audio-analyzer.py'],
+    ['src/bin/audio_analyzer.py'],
     pathex=[],
     binaries=[],
     datas=[],
