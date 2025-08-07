@@ -1,0 +1,21 @@
+[project]
+name = "audio-analyzer-python"
+version = "4.0.0"
+description = "Python analysis module for audio quality analyzer"
+requires-python = ">=3.8.1"
+
+dependencies = [
+    "pandas>=2.0.0",
+    "numpy>=1.24.0",
+    "pyinstaller>=6.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+]
+
+
