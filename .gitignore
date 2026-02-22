@@ -9,5 +9,10 @@ __pycache__/
 venv/
 *.egg-info/
 
+# Release artifacts and bundled binaries (publish via GitHub Releases)
+/releases/*.tar.gz
+/releases/**/audio-analyzer
+/assets/binaries/audio-analyzer
+
 # macOS
 .DS_Store

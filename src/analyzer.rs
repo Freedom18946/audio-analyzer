@@ -52,7 +52,6 @@ lazy_static! {
 
 /// 嵌入的二进制依赖文件
 const FFMPEG_BYTES: &[u8] = include_bytes!("../assets/binaries/ffmpeg");
-const ANALYZER_BYTES: &[u8] = include_bytes!("../assets/binaries/audio-analyzer");
 
 /// 音频分析器主结构
 pub struct AudioAnalyzer {
@@ -68,8 +67,8 @@ pub struct AudioAnalyzer {
 struct DependencyHandle {
     /// FFmpeg 可执行文件路径
     ffmpeg_path: PathBuf,
-    /// Python 分析器可执行文件路径
-    analyzer_path: PathBuf,
+    /// Python 分析器可执行文件路径（可选）
+    analyzer_path: Option<PathBuf>,
     /// 临时目录（保持引用以防止被删除）
     _temp_dir: TempDir,
 }
@@ -157,22 +156,13 @@ impl AudioAnalyzer {
             println!("正在初始化依赖项...");
         }
 
-        // 并行解压二进制文件以提高性能
+        // 解压 FFmpeg 二进制文件
         let ffmpeg_path = temp_dir.path().join("ffmpeg");
-        let analyzer_path = temp_dir.path().join("audio_analyzer");
-
-        let (ffmpeg_result, analyzer_result) = rayon::join(
-            || self.extract_binary_optimized(FFMPEG_BYTES, &ffmpeg_path, "FFmpeg"),
-            || self.extract_binary_optimized(ANALYZER_BYTES, &analyzer_path, "Python分析器"),
-        );
-
-        // 检查结果
-        ffmpeg_result?;
-        analyzer_result?;
+        self.extract_binary_optimized(FFMPEG_BYTES, &ffmpeg_path, "FFmpeg")?;
 
         self.dependencies = Some(DependencyHandle {
             ffmpeg_path,
-            analyzer_path,
+            analyzer_path: None,
             _temp_dir: temp_dir,
         });
 
@@ -607,7 +597,7 @@ impl AudioAnalyzer {
     pub fn get_analyzer_path(&self) -> Option<&std::path::Path> {
         self.dependencies
             .as_ref()
-            .map(|deps| deps.analyzer_path.as_path())
+            .and_then(|deps| deps.analyzer_path.as_deref())
     }
 
     fn run_ffmpeg_capture_stderr(&self, command: Command) -> Result<String> {
