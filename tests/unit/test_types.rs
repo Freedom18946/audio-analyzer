@@ -17,6 +17,7 @@ fn test_audio_metrics_creation() {
     assert_eq!(metrics.rms_db_above_18k, None);
     assert_eq!(metrics.rms_db_above_20k, None);
     assert_eq!(metrics.processing_time_ms, 0);
+    assert!(metrics.analysis_errors.is_empty());
 }
 
 #[test]

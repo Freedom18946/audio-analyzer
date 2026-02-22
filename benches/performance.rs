@@ -65,14 +65,21 @@ fn bench_filesystem_operations(c: &mut Criterion) {
     for file_count in [10, 50, 100, 500].iter() {
         let (_temp_dir, _files) = create_test_audio_files(*file_count);
         let extensions = vec!["wav".to_string(), "mp3".to_string()];
+        let scan = audio_analyzer_ultimate::config::ScanConfig {
+            verify_magic_bytes: false,
+            ..audio_analyzer_ultimate::config::ScanConfig::default()
+        };
 
         group.bench_with_input(
             BenchmarkId::new("scan_audio_files", file_count),
             file_count,
             |b, _| {
                 b.iter(|| {
-                    let result =
-                        black_box(fs_utils::scan_audio_files(_temp_dir.path(), &extensions));
+                    let result = black_box(fs_utils::scan_audio_files(
+                        _temp_dir.path(),
+                        &extensions,
+                        &scan,
+                    ));
                     black_box(result)
                 })
             },

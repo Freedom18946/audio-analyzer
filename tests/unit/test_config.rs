@@ -19,6 +19,9 @@ fn test_default_config_creation() {
     assert_eq!(config.num_threads, None);
     assert!(!config.verbose);
     assert!(config.show_progress);
+    assert!(!config.scan.follow_links);
+    assert!(config.scan.same_file_system);
+    assert!(config.scan.verify_magic_bytes);
 }
 
 #[test]
@@ -43,6 +46,15 @@ fn test_config_validation() {
     // 正常线程数应该通过
     config.num_threads = Some(4);
     assert!(config.validate().is_ok());
+
+    // 非法扫描深度
+    config.scan.max_depth = Some(0);
+    assert!(config.validate().is_err());
+    config.scan.max_depth = None;
+
+    // 非法 FFmpeg stderr 限制
+    config.ffmpeg.stderr_max_bytes = 0;
+    assert!(config.validate().is_err());
 }
 
 #[test]
@@ -117,6 +129,8 @@ fn test_ffmpeg_config_defaults() {
     assert_eq!(ffmpeg_config.log_level, "info");
     assert!(ffmpeg_config.hide_banner);
     assert_eq!(ffmpeg_config.timeout_seconds, Some(300));
+    assert_eq!(ffmpeg_config.max_parallel_processes, None);
+    assert!(ffmpeg_config.stderr_max_bytes > 0);
 }
 
 #[test]

@@ -43,6 +43,14 @@ pub struct AudioMetrics {
     /// 处理时间（毫秒）
     #[serde(rename = "processingTimeMs")]
     pub processing_time_ms: u64,
+
+    /// 分析阶段错误信息（用于区分超时/解析失败/格式错误等）
+    #[serde(
+        rename = "analysisErrors",
+        default,
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub analysis_errors: Vec<String>,
 }
 
 impl AudioMetrics {
@@ -58,6 +66,7 @@ impl AudioMetrics {
             rms_db_above_18k: None,
             rms_db_above_20k: None,
             processing_time_ms: 0,
+            analysis_errors: Vec::new(),
         }
     }
 
@@ -73,6 +82,11 @@ impl AudioMetrics {
             .and_then(|name| name.to_str())
             .unwrap_or("未知文件")
             .to_string()
+    }
+
+    /// 是否存在分析阶段错误
+    pub fn has_analysis_errors(&self) -> bool {
+        !self.analysis_errors.is_empty()
     }
 }
 
@@ -193,6 +207,7 @@ mod tests {
         assert_eq!(metrics.file_path, "test.wav");
         assert_eq!(metrics.file_size_bytes, 1024);
         assert!(!metrics.is_complete());
+        assert!(!metrics.has_analysis_errors());
     }
 
     #[test]

@@ -2,6 +2,7 @@
 //!
 //! 测试各种工具函数的正确性
 
+use audio_analyzer_ultimate::config::ScanConfig;
 use audio_analyzer_ultimate::utils::{fs_utils, string_utils, Timer};
 use std::path::Path;
 use std::time::Duration;
@@ -217,7 +218,15 @@ fn test_scan_audio_files() {
     std::fs::write(&audio_file3, "fake wav content").unwrap();
 
     // 扫描音频文件
-    let found_files = fs_utils::scan_audio_files(temp_dir.path(), &extensions).unwrap();
+    let found_files = fs_utils::scan_audio_files(
+        temp_dir.path(),
+        &extensions,
+        &ScanConfig {
+            verify_magic_bytes: false,
+            ..ScanConfig::default()
+        },
+    )
+    .unwrap();
 
     // 应该找到3个音频文件
     assert_eq!(found_files.len(), 3);

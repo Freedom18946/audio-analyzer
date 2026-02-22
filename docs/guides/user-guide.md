@@ -159,6 +159,11 @@
 - 分析可能不准确
 - 建议重新分析
 
+#### 🟡 分析异常
+- 扫描成功但分析阶段发生超时/解析失败等异常
+- 可通过 `analysisErrors` 字段查看具体阶段和类型
+- 建议增大 `--ffmpeg-timeout` 或检查源文件完整性
+
 ### CSV 报告字段说明
 
 | 字段名 | 含义 | 正常范围 | 说明 |
@@ -172,6 +177,7 @@
 | rmsDbAbove16k | 16kHz以上RMS | > -70 dB | 高频完整性 |
 | rmsDbAbove18k | 18kHz以上RMS | > -80 dB | 伪造检测 |
 | rmsDbAbove20k | 20kHz以上RMS | > -90 dB | 超高频内容 |
+| analysisErrors | 分析阶段错误标签 | - | 如 `lra:timeout`、`astats:parse_error` |
 
 ## 高级功能
 
@@ -186,9 +192,32 @@ export AUDIO_ANALYZER_VERBOSE=true
 # 设置并行线程数
 export AUDIO_ANALYZER_THREADS=8
 
+# FFmpeg 执行护栏
+export AUDIO_ANALYZER_FFMPEG_TIMEOUT=300
+export AUDIO_ANALYZER_FFMPEG_MAX_PROCS=8
+export AUDIO_ANALYZER_STDERR_MAX_BYTES=2097152
+
+# 扫描护栏
+export AUDIO_ANALYZER_MAX_FILES=5000
+export AUDIO_ANALYZER_MAX_DEPTH=12
+
 # 运行程序
 ./audio-analyzer
 ```
+
+### 安全与资源控制参数
+
+```bash
+./audio-analyzer /path/to/music \
+  --max-files 5000 \
+  --max-depth 12 \
+  --ffmpeg-timeout 300 \
+  --ffmpeg-max-procs 8
+```
+
+- 默认不跟随符号链接；可用 `--follow-links` 启用
+- 默认不跨文件系统扫描；可用 `--cross-filesystems` 启用
+- 默认启用魔数校验；可用 `--no-magic-check` 关闭
 
 ### 批处理模式
 

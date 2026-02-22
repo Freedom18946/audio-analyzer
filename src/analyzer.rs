@@ -17,6 +17,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::{Condvar, Mutex};
+use std::time::Duration;
 use tempfile::TempDir;
 
 // 预编译的正则表达式，用于解析FFmpeg输出
@@ -58,6 +60,8 @@ pub struct AudioAnalyzer {
     config: AnalyzerConfig,
     /// 依赖项句柄
     dependencies: Option<DependencyHandle>,
+    /// FFmpeg 并发限制器
+    process_limiter: Arc<ProcessLimiter>,
 }
 
 /// 依赖项管理句柄
@@ -70,15 +74,61 @@ struct DependencyHandle {
     _temp_dir: TempDir,
 }
 
+/// FFmpeg 进程并发限制器
+struct ProcessLimiter {
+    limit: usize,
+    active: Mutex<usize>,
+    condvar: Condvar,
+}
+
+/// 限制器许可
+struct ProcessPermit<'a> {
+    limiter: &'a ProcessLimiter,
+}
+
+impl ProcessLimiter {
+    fn new(limit: usize) -> Self {
+        Self {
+            limit,
+            active: Mutex::new(0),
+            condvar: Condvar::new(),
+        }
+    }
+
+    fn acquire(&self) -> ProcessPermit<'_> {
+        let mut active = self.active.lock().expect("process limiter poisoned");
+        while *active >= self.limit {
+            active = self.condvar.wait(active).expect("process limiter poisoned");
+        }
+        *active += 1;
+        ProcessPermit { limiter: self }
+    }
+}
+
+impl Drop for ProcessPermit<'_> {
+    fn drop(&mut self) {
+        if let Ok(mut active) = self.limiter.active.lock() {
+            *active = active.saturating_sub(1);
+            self.limiter.condvar.notify_one();
+        }
+    }
+}
+
 impl AudioAnalyzer {
     /// 创建新的音频分析器实例
     pub fn new(config: AnalyzerConfig) -> Result<Self> {
         // 验证配置
         config.validate()?;
 
+        let max_parallel = config
+            .ffmpeg
+            .max_parallel_processes
+            .unwrap_or_else(|| (config.effective_thread_count().saturating_mul(2)).clamp(2, 64));
+
         Ok(Self {
             config,
             dependencies: None,
+            process_limiter: Arc::new(ProcessLimiter::new(max_parallel)),
         })
     }
 
@@ -242,14 +292,44 @@ impl AudioAnalyzer {
         let mut metrics = AudioMetrics::new(file_path.to_string_lossy().to_string(), file_size);
 
         // 设置分析结果
-        metrics.lra = lra_result.ok();
-        if let Ok(stats) = stats_result {
-            metrics.peak_amplitude_db = stats.peak_db;
-            metrics.overall_rms_db = stats.rms_db;
+        match lra_result {
+            Ok(lra) => metrics.lra = Some(lra),
+            Err(err) => metrics
+                .analysis_errors
+                .push(format!("lra:{}", Self::classify_error(&err))),
         }
-        metrics.rms_db_above_16k = rms_16k_result.ok();
-        metrics.rms_db_above_18k = rms_18k_result.ok();
-        metrics.rms_db_above_20k = rms_20k_result.ok();
+
+        match stats_result {
+            Ok(stats) => {
+                metrics.peak_amplitude_db = stats.peak_db;
+                metrics.overall_rms_db = stats.rms_db;
+            }
+            Err(err) => metrics
+                .analysis_errors
+                .push(format!("astats:{}", Self::classify_error(&err))),
+        }
+
+        match rms_16k_result {
+            Ok(value) => metrics.rms_db_above_16k = Some(value),
+            Err(err) => metrics
+                .analysis_errors
+                .push(format!("hp16k:{}", Self::classify_error(&err))),
+        }
+
+        match rms_18k_result {
+            Ok(value) => metrics.rms_db_above_18k = Some(value),
+            Err(err) => metrics
+                .analysis_errors
+                .push(format!("hp18k:{}", Self::classify_error(&err))),
+        }
+
+        match rms_20k_result {
+            Ok(value) => metrics.rms_db_above_20k = Some(value),
+            Err(err) => metrics
+                .analysis_errors
+                .push(format!("hp20k:{}", Self::classify_error(&err))),
+        }
+
         metrics.processing_time_ms = processing_time_ms;
 
         Ok(metrics)
@@ -270,29 +350,36 @@ impl AudioAnalyzer {
 
         let timer = Timer::new("批量分析");
 
-        let results: Vec<AudioMetrics> = file_paths
-            .par_iter()
-            .filter_map(|path| {
-                let count = processed_count.fetch_add(1, Ordering::SeqCst) + 1;
+        let thread_pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(self.config.effective_thread_count())
+            .build()
+            .map_err(|e| AnalyzerError::Other(format!("创建线程池失败: {e}")))?;
 
-                if self.config.show_progress {
-                    println!(
-                        "[{}/{}] 正在处理: {}",
-                        count,
-                        total_files,
-                        fs_utils::get_display_name(path)
-                    );
-                }
+        let results: Vec<AudioMetrics> = thread_pool.install(|| {
+            file_paths
+                .par_iter()
+                .filter_map(|path| {
+                    let count = processed_count.fetch_add(1, Ordering::SeqCst) + 1;
 
-                match self.analyze_file(path) {
-                    Ok(metrics) => Some(metrics),
-                    Err(e) => {
-                        eprintln!("处理失败: {}\n └─> 错误详情: {}", path.display(), e);
-                        None
+                    if self.config.show_progress {
+                        println!(
+                            "[{}/{}] 正在处理: {}",
+                            count,
+                            total_files,
+                            fs_utils::get_display_name(path)
+                        );
                     }
-                }
-            })
-            .collect();
+
+                    match self.analyze_file(path) {
+                        Ok(metrics) => Some(metrics),
+                        Err(e) => {
+                            eprintln!("处理失败: {}\n └─> 错误详情: {}", path.display(), e);
+                            None
+                        }
+                    }
+                })
+                .collect()
+        });
 
         if self.config.verbose {
             timer.print_elapsed();
@@ -304,12 +391,14 @@ impl AudioAnalyzer {
 
     /// 分析目录中的所有音频文件
     pub fn analyze_directory<P: AsRef<Path>>(&self, dir_path: P) -> Result<Vec<AudioMetrics>> {
-        let audio_files = fs_utils::scan_audio_files(dir_path, &self.config.supported_extensions)?;
+        let audio_files = fs_utils::scan_audio_files(
+            dir_path,
+            &self.config.supported_extensions,
+            &self.config.scan,
+        )?;
 
         if audio_files.is_empty() {
-            return Err(AnalyzerError::Other(
-                "在指定目录中未找到支持的音频文件".to_string(),
-            ));
+            return Ok(Vec::new());
         }
 
         if self.config.verbose {
@@ -355,7 +444,7 @@ impl AudioAnalyzer {
         }
         command.arg("-loglevel").arg(&self.config.ffmpeg.log_level);
 
-        let stderr = process_utils::run_command_capture_stderr(command)?;
+        let stderr = self.run_ffmpeg_capture_stderr(command)?;
 
         // 首先尝试匹配汇总的LRA值
         if let Some(caps) = EBUR128_SUMMARY_LRA_REGEX.captures(&stderr) {
@@ -420,7 +509,7 @@ impl AudioAnalyzer {
         }
         command.arg("-loglevel").arg(&self.config.ffmpeg.log_level);
 
-        let stderr = process_utils::run_command_capture_stderr(command)?;
+        let stderr = self.run_ffmpeg_capture_stderr(command)?;
 
         // 尝试使用复杂正则表达式匹配
         if let Some(caps) = ASTATS_OVERALL_REGEX.captures(&stderr) {
@@ -476,7 +565,7 @@ impl AudioAnalyzer {
         }
         command.arg("-loglevel").arg(&self.config.ffmpeg.log_level);
 
-        let stderr = process_utils::run_command_capture_stderr(command)?;
+        let stderr = self.run_ffmpeg_capture_stderr(command)?;
 
         // 尝试使用高通滤波专用正则表达式
         if let Some(caps) = HIGHPASS_ASTATS_REGEX.captures(&stderr) {
@@ -497,8 +586,10 @@ impl AudioAnalyzer {
         if let Some(&last_rms) = rms_values.last() {
             Ok(last_rms)
         } else {
-            // 如果没有找到任何RMS值，返回一个默认的低值
-            Ok(-144.0)
+            Err(AnalyzerError::ParseError {
+                message: format!("无法解析高通 RMS ({}Hz)", frequency),
+                raw_data: Some(stderr.chars().take(500).collect()),
+            })
         }
     }
 
@@ -517,5 +608,27 @@ impl AudioAnalyzer {
         self.dependencies
             .as_ref()
             .map(|deps| deps.analyzer_path.as_path())
+    }
+
+    fn run_ffmpeg_capture_stderr(&self, command: Command) -> Result<String> {
+        let _permit = self.process_limiter.acquire();
+        process_utils::run_command_capture_stderr(
+            command,
+            self.config.ffmpeg.timeout_seconds.map(Duration::from_secs),
+            self.config.ffmpeg.stderr_max_bytes,
+        )
+    }
+
+    fn classify_error(error: &AnalyzerError) -> &'static str {
+        match error {
+            AnalyzerError::TimeoutError { .. } => "timeout",
+            AnalyzerError::ParseError { .. } => "parse_error",
+            AnalyzerError::UnsupportedFormat { .. } => "unsupported_format",
+            AnalyzerError::FfmpegError { .. } => "ffmpeg_error",
+            AnalyzerError::Io(_) => "io_error",
+            AnalyzerError::ConfigError(_) => "config_error",
+            AnalyzerError::DependencyError(_) => "dependency_error",
+            AnalyzerError::Other(_) => "other_error",
+        }
     }
 }

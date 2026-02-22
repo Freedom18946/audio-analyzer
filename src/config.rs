@@ -9,6 +9,7 @@ use std::path::PathBuf;
 
 /// 音频分析器配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AnalyzerConfig {
     /// 支持的音频文件扩展名
     pub supported_extensions: Vec<String>,
@@ -30,10 +31,14 @@ pub struct AnalyzerConfig {
 
     /// FFmpeg 配置
     pub ffmpeg: FfmpegConfig,
+
+    /// 扫描配置
+    pub scan: ScanConfig,
 }
 
 /// 输出配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct OutputConfig {
     /// 输出目录
     pub output_dir: Option<PathBuf>,
@@ -53,6 +58,7 @@ pub struct OutputConfig {
 
 /// FFmpeg 配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct FfmpegConfig {
     /// FFmpeg 日志级别
     pub log_level: String,
@@ -62,6 +68,32 @@ pub struct FfmpegConfig {
 
     /// 超时时间（秒）
     pub timeout_seconds: Option<u64>,
+
+    /// FFmpeg 最大并发进程数（None 表示自动）
+    pub max_parallel_processes: Option<usize>,
+
+    /// 单次命令可保留的 stderr 最大字节数
+    pub stderr_max_bytes: usize,
+}
+
+/// 文件扫描配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ScanConfig {
+    /// 是否跟随符号链接
+    pub follow_links: bool,
+
+    /// 扫描最大深度（None 表示不限制）
+    pub max_depth: Option<usize>,
+
+    /// 最多扫描到的音频文件数（None 表示不限制）
+    pub max_files: Option<usize>,
+
+    /// 是否限制在同一文件系统内扫描
+    pub same_file_system: bool,
+
+    /// 是否基于文件头进行魔数校验
+    pub verify_magic_bytes: bool,
 }
 
 impl Default for AnalyzerConfig {
@@ -85,6 +117,7 @@ impl Default for AnalyzerConfig {
             show_progress: true,
             output: OutputConfig::default(),
             ffmpeg: FfmpegConfig::default(),
+            scan: ScanConfig::default(),
         }
     }
 }
@@ -107,6 +140,20 @@ impl Default for FfmpegConfig {
             log_level: "info".to_string(),
             hide_banner: true,
             timeout_seconds: Some(300), // 5分钟超时
+            max_parallel_processes: None,
+            stderr_max_bytes: 2 * 1024 * 1024, // 2MB 上限，避免异常 stderr 撑爆内存
+        }
+    }
+}
+
+impl Default for ScanConfig {
+    fn default() -> Self {
+        Self {
+            follow_links: false,
+            max_depth: None,
+            max_files: None,
+            same_file_system: true,
+            verify_magic_bytes: true,
         }
     }
 }
@@ -139,6 +186,44 @@ impl AnalyzerConfig {
         if let Some(threads) = self.num_threads {
             if threads == 0 {
                 return Err(AnalyzerError::ConfigError("线程数必须大于0".to_string()));
+            }
+        }
+
+        if let Some(timeout) = self.ffmpeg.timeout_seconds {
+            if timeout == 0 {
+                return Err(AnalyzerError::ConfigError(
+                    "FFmpeg 超时时间必须大于0".to_string(),
+                ));
+            }
+        }
+
+        if let Some(max_parallel) = self.ffmpeg.max_parallel_processes {
+            if max_parallel == 0 {
+                return Err(AnalyzerError::ConfigError(
+                    "FFmpeg 最大并发进程数必须大于0".to_string(),
+                ));
+            }
+        }
+
+        if self.ffmpeg.stderr_max_bytes == 0 {
+            return Err(AnalyzerError::ConfigError(
+                "FFmpeg stderr 缓冲上限必须大于0".to_string(),
+            ));
+        }
+
+        if let Some(depth) = self.scan.max_depth {
+            if depth == 0 {
+                return Err(AnalyzerError::ConfigError(
+                    "扫描最大深度必须大于0".to_string(),
+                ));
+            }
+        }
+
+        if let Some(max_files) = self.scan.max_files {
+            if max_files == 0 {
+                return Err(AnalyzerError::ConfigError(
+                    "扫描最大文件数必须大于0".to_string(),
+                ));
             }
         }
 

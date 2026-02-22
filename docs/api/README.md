@@ -88,6 +88,7 @@ config.show_progress = true;
 - `show_progress: bool` - 是否显示进度信息
 - `output: OutputConfig` - 输出配置
 - `ffmpeg: FfmpegConfig` - FFmpeg 配置
+- `scan: ScanConfig` - 扫描配置（深度/文件数/符号链接/魔数校验）
 
 #### 方法
 
@@ -137,6 +138,7 @@ let filename = metrics.filename();
 - `rms_db_above_18k: Option<f64>` - 18kHz以上RMS (dB)
 - `rms_db_above_20k: Option<f64>` - 20kHz以上RMS (dB)
 - `processing_time_ms: u64` - 处理时间（毫秒）
+- `analysis_errors: Vec<String>` - 分析阶段错误标签（如 `hp18k:timeout`）
 
 #### 方法
 
@@ -159,11 +161,13 @@ let filename = metrics.filename();
 文件系统相关工具函数。
 
 ```rust
+use audio_analyzer_ultimate::config::ScanConfig;
 use audio_analyzer_ultimate::utils::fs_utils;
 
 // 扫描音频文件
 let extensions = vec!["wav".to_string(), "mp3".to_string()];
-let files = fs_utils::scan_audio_files("/path/to/music", &extensions)?;
+let scan = ScanConfig::default();
+let files = fs_utils::scan_audio_files("/path/to/music", &extensions, &scan)?;
 
 // 检查文件格式
 let is_audio = fs_utils::is_supported_audio_file(&path, &extensions);
@@ -219,6 +223,9 @@ match analyzer.analyze_file(&path) {
         if let Some(stderr) = stderr {
             println!("详细信息: {}", stderr);
         }
+    }
+    Err(AnalyzerError::TimeoutError { message, .. }) => {
+        println!("执行超时: {}", message);
     }
     Err(e) => println!("其他错误: {}", e),
 }

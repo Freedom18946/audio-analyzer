@@ -186,9 +186,43 @@ export AUDIO_ANALYZER_VERBOSE=true
 # 设置并行线程数（默认为CPU核心数）
 export AUDIO_ANALYZER_THREADS=8
 
+# FFmpeg 超时与并发护栏
+export AUDIO_ANALYZER_FFMPEG_TIMEOUT=300
+export AUDIO_ANALYZER_FFMPEG_MAX_PROCS=8
+export AUDIO_ANALYZER_STDERR_MAX_BYTES=2097152
+
+# 扫描护栏
+export AUDIO_ANALYZER_MAX_FILES=5000
+export AUDIO_ANALYZER_MAX_DEPTH=12
+
 # 运行程序
 ./audio-analyzer
 ```
+
+### 新增安全与资源控制参数
+
+```bash
+audio-analyzer /path/to/music \
+  --max-files 5000 \
+  --max-depth 12 \
+  --ffmpeg-timeout 300 \
+  --ffmpeg-max-procs 8 \
+  --stderr-max-bytes 2097152
+```
+
+常用参数：
+
+- `--max-files`: 最多扫描的音频文件数（防止超大目录 DoS）
+- `--max-depth`: 扫描最大目录深度
+- `--follow-links`: 允许跟随符号链接（默认不跟随）
+- `--cross-filesystems`: 允许跨文件系统扫描（默认不跨，避免误扫挂载盘/网络盘）
+- `--no-magic-check`: 关闭音频魔数校验（默认开启）
+- `--ffmpeg-timeout`: 每个 FFmpeg 命令超时秒数
+- `--ffmpeg-max-procs`: FFmpeg 最大并发进程数
+- `--stderr-max-bytes`: 单次命令 stderr 缓冲上限
+- `--python-script`: 显式指定分析脚本（仅开发调试）
+
+默认行为：程序不会再从当前工作目录自动寻找并执行 `src/bin/audio_analyzer.py`，以避免目录投毒执行风险。
 
 ### 输出报告说明
 
@@ -205,6 +239,7 @@ export AUDIO_ANALYZER_THREADS=8
 | rmsDbAbove16k | 16kHz以上RMS | dB |
 | rmsDbAbove18k | 18kHz以上RMS | dB |
 | rmsDbAbove20k | 20kHz以上RMS | dB |
+| analysisErrors | 分析阶段错误标签（如 `lra:timeout`） | 文本/数组 |
 
 ### 质量评估标准
 

@@ -21,6 +21,14 @@ pub enum AnalyzerError {
         stderr: Option<String>,
     },
 
+    /// 命令执行超时
+    TimeoutError {
+        /// 错误消息
+        message: String,
+        /// 命令输出
+        stderr: Option<String>,
+    },
+
     /// 文件格式不支持
     UnsupportedFormat {
         /// 文件路径
@@ -53,6 +61,13 @@ impl fmt::Display for AnalyzerError {
             AnalyzerError::Io(err) => write!(f, "I/O 错误: {err}"),
             AnalyzerError::FfmpegError { message, stderr } => {
                 write!(f, "FFmpeg 执行错误: {message}")?;
+                if let Some(stderr) = stderr {
+                    write!(f, "\n详细信息: {stderr}")?;
+                }
+                Ok(())
+            }
+            AnalyzerError::TimeoutError { message, stderr } => {
+                write!(f, "执行超时: {message}")?;
                 if let Some(stderr) = stderr {
                     write!(f, "\n详细信息: {stderr}")?;
                 }
