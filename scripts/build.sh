@@ -82,7 +82,7 @@ clean_build() {
     cargo clean
     
     # 清理 Python 构建产物
-    rm -rf build/ dist/ *.spec
+    rm -rf build/ dist/
     
     # 清理临时文件
     find . -name "*.pyc" -delete
@@ -159,6 +159,8 @@ build_python_analyzer_uv() {
                        --name audio-analyzer \
                        --clean \
                        --distpath assets/binaries \
+                       --workpath build \
+                       --specpath build \
                        src/bin/audio_analyzer.py
 
     # 验证构建结果
@@ -193,6 +195,8 @@ build_python_analyzer() {
                     --name audio-analyzer \
                     --clean \
                     --distpath assets/binaries \
+                    --workpath build \
+                    --specpath build \
                     src/bin/audio_analyzer.py
 
         # 验证构建结果
@@ -224,6 +228,11 @@ build_rust_binary() {
 
 # 创建发布包
 create_release_package() {
+    if ! command -v jq &> /dev/null; then
+        log_error "创建发布包需要 jq，请先安装 jq 后重试"
+        exit 1
+    fi
+
     local version=$(cargo metadata --format-version 1 | jq -r '.packages[] | select(.name == "audio_analyzer_ultimate") | .version')
     local package_name="audio-analyzer-v${version}-$(uname -m)-$(uname -s | tr '[:upper:]' '[:lower:]')"
     
@@ -295,7 +304,7 @@ verify_build() {
 
 # 主函数
 main() {
-    echo "🎵 音频质量分析器构建脚本 v4.0"
+    echo "🎵 音频质量分析器构建脚本 v4.0.1"
     echo "=================================="
     
     # 解析命令行参数

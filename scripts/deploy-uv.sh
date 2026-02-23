@@ -230,7 +230,7 @@ build_analyzer() {
         --clean \
         --distpath assets/binaries \
         --workpath build \
-        --specpath . \
+        --specpath build \
         src/bin/audio_analyzer.py
     
     end_timer
@@ -311,7 +311,7 @@ cleanup() {
     log_step "清理构建产物..."
     
     # 清理 Python 构建产物
-    rm -rf build/ dist/ *.spec
+    rm -rf build/ dist/
     find . -name "*.pyc" -delete
     find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
     
@@ -351,7 +351,7 @@ show_performance_stats() {
 
 # 主函数
 main() {
-    echo "🚀 音频质量分析器 UV 快捷部署脚本 v4.0"
+    echo "🚀 音频质量分析器 UV 快捷部署脚本 v4.0.1"
     echo "=============================================="
     
     # 解析命令行参数

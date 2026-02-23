@@ -1,4 +1,4 @@
-# 音频质量分析器 v4.0.0 发布检查清单
+# 音频质量分析器 v4.0.1 发布检查清单
 
 ## 发布前准备
 
@@ -24,13 +24,13 @@
 - [x] 代码注释完整且准确
 
 ### 3. 测试验证 ✅
-- [x] 单元测试全部通过 (17/17)
+- [x] 单元测试全部通过 (18/18)
   ```bash
   cargo test --lib
   ```
 - [x] 集成测试全部通过 (29/29)
   ```bash
-  cargo test --test integration_tests
+  cargo test --tests
   ```
 - [x] 二进制测试通过 (1/1)
   ```bash
@@ -50,6 +50,10 @@
   ```bash
   ./scripts/deploy-uv.sh
   ```
+- [x] 一键快速部署脚本测试通过
+  ```bash
+  ./scripts/quickstart.sh build
+  ```
 - [x] 传统构建脚本测试通过
   ```bash
   ./scripts/build.sh
@@ -57,15 +61,15 @@
 - [x] 跨平台兼容性验证
 
 ### 5. 版本一致性检查 ✅
-- [x] Cargo.toml 版本: 4.0.0
-- [x] pyproject.toml 版本: 4.0.0
-- [x] main.rs 版本: 4.0.0
-- [x] README.md 版本: v4.0.0
+- [x] Cargo.toml 版本: 4.0.1
+- [x] pyproject.toml 版本: 4.0.1
+- [x] main.rs 版本: 4.0.1
+- [x] README.md 版本: v4.0.1
 - [x] 所有文档中版本号一致
 
 ### 6. 文档完整性 ✅
 - [x] README.md 更新完整
-- [x] CHANGELOG.md 包含 v4.0.0 更新
+- [x] CHANGELOG.md 包含 v4.0.1 更新
 - [x] 部署文档 (docs/deployment.md) 准确
 - [x] UV 集成指南 (docs/guides/uv-integration.md) 完整
 - [x] 项目总结 (docs/PROJECT_SUMMARY.md) 最新
@@ -90,7 +94,7 @@
 ### 1. 准备发布包
 ```bash
 # 最终构建和打包
-./scripts/build.sh --package
+./scripts/quickstart.sh package
 
 # 验证发布包
 ls -la releases/
@@ -99,17 +103,17 @@ ls -la releases/
 ### 2. 创建 Git 标签
 ```bash
 # 创建带注释的标签
-git tag -a v4.0.0 -m "Release version 4.0.0 - UV Integration & Performance Optimization"
+git tag -a v4.0.1 -m "Release version 4.0.1 - Stability, CLI, and build improvements"
 
 # 推送标签到远程仓库
-git push origin v4.0.0
+git push origin v4.0.1
 ```
 
 ### 3. GitHub Release 配置
 
 **发布标题：**
 ```
-🚀 音频质量分析器 v4.0.0 - UV 集成与性能优化
+🚀 音频质量分析器 v4.0.1 - 稳定性与构建流程优化
 ```
 
 **发布说明模板：**
@@ -164,7 +168,7 @@ git push origin v4.0.0
 
 **必需附件：**
 - [ ] 源代码压缩包（GitHub 自动生成）
-- [ ] 预构建发布包：`audio-analyzer-v4.0.0-arm64-darwin.tar.gz`
+- [ ] 预构建发布包：`audio-analyzer-v4.0.1-arm64-darwin.tar.gz`
 
 **可选附件：**
 - [ ] 校验和文件 (SHA256SUMS)
@@ -209,7 +213,7 @@ git push origin v4.0.0
 2. **修复流程：**
    - 修复问题
    - 重新测试
-   - 创建补丁版本 (v4.0.1)
+   - 创建补丁版本 (v4.0.2)
 
 3. **通信计划：**
    - 及时通知用户

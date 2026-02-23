@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-音频质量分析器 v4.0 (重构优化版)
+音频质量分析器 v4.0.1 (重构优化版)
 提供音频质量分析和报告生成功能
 
 主要功能：
@@ -12,7 +12,7 @@
 - 支持多种质量指标和阈值配置
 
 作者: Audio Analyzer Team
-版本: 4.0.0
+版本: 4.0.1
 """
 
 from __future__ import annotations
@@ -115,6 +115,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
+APP_VERSION = "4.0.1"
 
 
 @dataclass
@@ -767,10 +768,38 @@ def _write_csv_without_pandas(records: List[Dict], output_path: str) -> None:
             writer.writerow(row)
 
 
+def _print_optional_stats_without_pandas(records: List[Dict], total_input: int) -> None:
+    if not records:
+        print("\n📈 详细统计:")
+        print(" - 输出记录数: 0")
+        return
+
+    scores = [int(row.get("质量分", 0)) for row in records]
+    avg_score = sum(scores) / len(scores)
+    print("\n📈 详细统计:")
+    print(f" - 输入记录数: {total_input}")
+    print(f" - 输出记录数: {len(records)}")
+    print(f" - 平均分: {avg_score:.1f}")
+    print(f" - 最高分: {max(scores)}")
+    print(f" - 最低分: {min(scores)}")
+
+
+def _print_incomplete_without_pandas(records: List[Dict], limit: int = 10) -> None:
+    incomplete = [row for row in records if str(row.get("状态", "")) == "数据不完整"]
+    print(f"\n🧩 数据不完整文件: {len(incomplete)}")
+    for idx, row in enumerate(incomplete[:limit], 1):
+        filename = os.path.basename(str(row.get("filePath", "Unknown")))
+        note = str(row.get("备注", ""))
+        print(f" {idx}. {filename} -> {note}")
+
+
 def main():
     """主执行函数"""
     parser = argparse.ArgumentParser(
-        description="分析由 audio_analyzer (Rust) 生成的 JSON 数据 (v4.1 PyInstaller兼容版)。"
+        description=(
+            f"分析由 audio_analyzer (Rust) 生成的 JSON 数据 (v{APP_VERSION} "
+            "PyInstaller兼容版)。"
+        )
     )
 
     parser.add_argument("input_json", help="输入的 analysis_data.json 文件路径。")
@@ -826,11 +855,12 @@ def main():
                 filtered_count = len(df) - len(report_df)
                 print(f" (已过滤掉 {filtered_count} 个低分文件)")
 
-            print(f"\n--- 优化分析摘要 (v4.1) ---")
+            print(f"\n--- 优化分析摘要 (v{APP_VERSION}) ---")
             status_counts = report_df["状态"].value_counts()
             print(f"\n📊 质量状态分布:")
+            summary_total = max(len(report_df), 1)
             for status, count in status_counts.items():
-                percentage = (count / len(df)) * 100
+                percentage = (count / summary_total) * 100
                 print(f" - {status}: {count} 个文件 ({percentage:.1f}%)")
 
             print(f"\n🏆 质量排名前 5 的文件:")
@@ -839,6 +869,32 @@ def main():
                     os.path.basename(row["filePath"]) if "filePath" in row else "Unknown"
                 )
                 print(f" {i}. [分数: {int(row['质量分'])}] {filename}")
+
+            if args.show_stats:
+                if len(report_df) > 0:
+                    print("\n📈 详细统计:")
+                    print(f" - 输入记录数: {len(df)}")
+                    print(f" - 输出记录数: {len(report_df)}")
+                    print(f" - 平均分: {report_df['质量分'].mean():.1f}")
+                    print(f" - 最高分: {int(report_df['质量分'].max())}")
+                    print(f" - 最低分: {int(report_df['质量分'].min())}")
+                else:
+                    print("\n📈 详细统计:")
+                    print(f" - 输入记录数: {len(df)}")
+                    print(" - 输出记录数: 0")
+                print(f" - Python分析耗时: {analyzer.stats['processing_time']:.2f}s")
+
+            if args.show_incomplete:
+                incomplete_df = report_df[report_df["状态"] == "数据不完整"]
+                print(f"\n🧩 数据不完整文件: {len(incomplete_df)}")
+                for i, (_, row) in enumerate(incomplete_df.head(10).iterrows(), 1):
+                    filename = (
+                        os.path.basename(row["filePath"])
+                        if "filePath" in row
+                        else "Unknown"
+                    )
+                    note = row["备注"] if "备注" in row else ""
+                    print(f" {i}. {filename} -> {note}")
 
             return 0
 
@@ -865,8 +921,9 @@ def main():
             status_counts[status] = status_counts.get(status, 0) + 1
 
         print("\n📊 质量状态分布:")
+        summary_total = max(len(analyzed_records), 1)
         for status, count in status_counts.items():
-            percentage = (count / max(len(df), 1)) * 100
+            percentage = (count / summary_total) * 100
             print(f" - {status}: {count} 个文件 ({percentage:.1f}%)")
 
         print("\n🏆 质量排名前 5 的文件:")
@@ -874,6 +931,12 @@ def main():
             filename = os.path.basename(str(row.get("filePath", "Unknown")))
             score = int(row.get("质量分", 0))
             print(f" {i}. [分数: {score}] {filename}")
+
+        if args.show_stats:
+            _print_optional_stats_without_pandas(analyzed_records, len(df))
+
+        if args.show_incomplete:
+            _print_incomplete_without_pandas(analyzed_records)
 
         return 0
 

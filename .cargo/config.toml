@@ -1,0 +1,2 @@
+[target.'cfg(all(target_arch = "aarch64", target_os = "macos"))']
+rustflags = ["-C", "target-cpu=apple-m1"]

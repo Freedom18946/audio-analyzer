@@ -1,6 +1,6 @@
 [package]
 name = "audio_analyzer_ultimate"
-version = "4.0.0"
+version = "4.0.1"
 edition = "2021"
 authors = ["Audio Analyzer Team"]
 description = "Ultimate Audio Quality Analyzer - Rust + Python Hybrid for macOS ARM64"
@@ -49,10 +49,6 @@ codegen-units = 1
 lto = true
 panic = "abort"
 opt-level = 3
-
-# 修复：正确的ARM64构建配置
-[target.'cfg(all(target_arch = "aarch64", target_os = "macos"))']
-rustflags = ["-C", "target-cpu=apple-m1"]
 
 [package.metadata.bundle]
 name = "AudioQualityAnalyzer"

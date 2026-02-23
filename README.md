@@ -1,9 +1,9 @@
-# 音频质量分析器 (Audio Quality Analyzer) v4.0.0
+# 音频质量分析器 (Audio Quality Analyzer) v4.0.1
 
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org)
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-4.0.0-brightgreen.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-4.0.1-brightgreen.svg)](CHANGELOG.md)
 
 一个高性能的音频质量分析工具，采用 Rust + Python 混合架构，专为音频工程师和音乐制作人设计。
 
@@ -98,13 +98,36 @@ audio-analyzer/
 
 ### 安装方法
 
-#### 方法一：预编译版本（推荐）
+#### 方法一：克隆后“一键构建运行”（推荐）
+
+```bash
+git clone https://github.com/your-repo/audio-analyzer.git
+cd audio-analyzer
+
+# 一键构建（自动安装 UV、构建 Rust 主程序和 Python 分析器）
+./scripts/quickstart.sh build
+
+# 运行
+./target/release/audio-analyzer --help
+```
+
+`quickstart` 常用模式：
+
+```bash
+# 构建并立即运行
+./scripts/quickstart.sh run -- /path/to/music
+
+# 构建并打包可分发版本（dist/*.tar.gz）
+./scripts/quickstart.sh package
+```
+
+#### 方法二：预编译版本
 
 1. 从 [Releases](https://github.com/your-repo/audio-analyzer/releases) 下载最新版本
 2. 解压到任意目录
 3. 运行 `audio-analyzer` 可执行文件
 
-#### 方法二：UV 快捷部署（推荐）
+#### 方法三：UV 快捷部署（兼容旧流程）
 
 使用 UV 工具进行极速部署，安装速度提升 10-100 倍：
 
@@ -128,7 +151,7 @@ cd audio-analyzer
 | 虚拟环境创建 | 8-12s | 1-2s | 6-8x |
 | 总构建时间 | 80-120s | 15-25s | 4-6x |
 
-#### 方法三：传统方式编译
+#### 方法四：传统方式编译
 
 ```bash
 # 1. 克隆仓库
@@ -149,6 +172,10 @@ mv dist/audio-analyzer assets/binaries/
 # 6. 运行程序
 ./target/release/audio-analyzer
 ```
+
+说明：
+- `quickstart` 构建产物会包含 `target/release/audio-analyzer-py`。
+- 主程序会优先使用该可执行分析器，减少对本机 Python 依赖环境的要求。
 
 ## 📖 使用指南
 
@@ -175,6 +202,17 @@ mv dist/audio-analyzer assets/binaries/
    - `analysis_data.json` - 原始分析数据
    - `audio_quality_report.csv` - 格式化的质量报告
 
+### 单文件分析（v4.0.1 新增）
+
+```bash
+audio-analyzer /path/to/song.flac
+```
+
+默认输出目录规则：
+- 输入是目录：输出到该目录
+- 输入是单文件：输出到该文件所在目录
+- 显式传 `-o/--output` 时：输出到指定目录
+
 ### 环境变量配置
 
 可以通过环境变量自定义程序行为：
@@ -198,6 +236,12 @@ export AUDIO_ANALYZER_MAX_DEPTH=12
 # 运行程序
 ./audio-analyzer
 ```
+
+配置优先级（高 -> 低）：
+- 命令行参数
+- 环境变量
+- 配置文件（`--config`）
+- 内置默认值
 
 ### 新增安全与资源控制参数
 

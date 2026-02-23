@@ -16,7 +16,7 @@ use std::process::Command;
 fn main() -> Result<()> {
     // 解析命令行参数
     let matches = ClapCommand::new("audio-analyzer")
-        .version("4.0.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .author("Audio Analyzer Team")
         .about("高性能音频质量分析器")
         .long_about(
@@ -134,7 +134,7 @@ fn main() -> Result<()> {
 
     // 显示欢迎信息（除非是静默模式）
     if !matches.get_flag("quiet") {
-        println!("🎵 音频质量分析器 v4.0 (重构优化版)");
+        println!("🎵 音频质量分析器 v{}", env!("CARGO_PKG_VERSION"));
         println!("开始时间: {}", Local::now().format("%Y-%m-%d %H:%M:%S"));
         println!();
     }
@@ -151,15 +151,15 @@ fn main() -> Result<()> {
     }
     analyzer.initialize_dependencies()?;
 
-    // 获取输入路径
-    let folder_path = if let Some(input_path) = matches.get_one::<String>("input") {
-        let path = PathBuf::from(input_path);
+    // 获取输入路径：支持目录和单文件
+    let input_path = if let Some(path_str) = matches.get_one::<String>("input") {
+        let path = PathBuf::from(path_str);
         if !path.exists() {
             eprintln!("❌ 错误: 指定的路径不存在: {}", path.display());
             std::process::exit(1);
         }
-        if !path.is_dir() {
-            eprintln!("❌ 错误: 指定的路径不是目录: {}", path.display());
+        if !path.is_dir() && !path.is_file() {
+            eprintln!("❌ 错误: 指定路径既不是文件也不是目录: {}", path.display());
             std::process::exit(1);
         }
         path
@@ -167,13 +167,37 @@ fn main() -> Result<()> {
         input_utils::get_folder_path_from_user()?
     };
 
-    if !matches.get_flag("quiet") {
-        println!("📂 正在扫描文件夹: {}", folder_path.display());
+    let is_directory = input_path.is_dir();
+    if !is_directory {
+        let extension = input_path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or_default();
+        if !analyzer.config().is_supported_extension(extension) {
+            eprintln!("❌ 错误: 不支持的音频文件格式: {}", input_path.display());
+            eprintln!(
+                "支持的格式: {}",
+                analyzer.config().supported_extensions.join(", ")
+            );
+            std::process::exit(1);
+        }
     }
 
-    // 分析目录中的音频文件
+    if !matches.get_flag("quiet") {
+        if is_directory {
+            println!("📂 正在扫描文件夹: {}", input_path.display());
+        } else {
+            println!("🎵 正在分析文件: {}", input_path.display());
+        }
+    }
+
+    // 目录批量分析或单文件分析
     let timer = Timer::new("总体分析");
-    let results = analyzer.analyze_directory(&folder_path)?;
+    let results = if is_directory {
+        analyzer.analyze_directory(&input_path)?
+    } else {
+        vec![analyzer.analyze_file(&input_path)?]
+    };
 
     if results.is_empty() {
         if !matches.get_flag("quiet") {
@@ -195,8 +219,14 @@ fn main() -> Result<()> {
     // 保存中间数据到JSON文件
     let output_dir = if let Some(output) = matches.get_one::<String>("output") {
         PathBuf::from(output)
+    } else if is_directory {
+        input_path.clone()
     } else {
-        folder_path.clone()
+        input_path
+            .parent()
+            .filter(|path| !path.as_os_str().is_empty())
+            .map(PathBuf::from)
+            .unwrap_or(std::env::current_dir()?)
     };
     fs_utils::ensure_dir_exists(&output_dir)?;
 
@@ -234,6 +264,7 @@ fn main() -> Result<()> {
 
 /// 从命令行参数创建配置
 fn create_config_from_matches(matches: &clap::ArgMatches) -> Result<AnalyzerConfig> {
+    // 配置优先级：CLI > 环境变量 > 配置文件 > 内置默认值
     let mut config = AnalyzerConfig::default();
 
     // 从配置文件加载（如果指定）
@@ -241,7 +272,48 @@ fn create_config_from_matches(matches: &clap::ArgMatches) -> Result<AnalyzerConf
         config = AnalyzerConfig::from_file(config_file)?;
     }
 
-    // 命令行参数覆盖配置文件设置
+    // 从环境变量读取配置（覆盖配置文件）
+    if let Ok(verbose) = std::env::var("AUDIO_ANALYZER_VERBOSE") {
+        config.verbose = env_is_true(&verbose);
+    }
+
+    if let Ok(threads) = std::env::var("AUDIO_ANALYZER_THREADS") {
+        if let Ok(num) = threads.parse::<usize>() {
+            config.num_threads = Some(num);
+        }
+    }
+
+    if let Ok(timeout) = std::env::var("AUDIO_ANALYZER_FFMPEG_TIMEOUT") {
+        if let Ok(timeout_seconds) = timeout.parse::<u64>() {
+            config.ffmpeg.timeout_seconds = Some(timeout_seconds);
+        }
+    }
+
+    if let Ok(max_procs) = std::env::var("AUDIO_ANALYZER_FFMPEG_MAX_PROCS") {
+        if let Ok(value) = max_procs.parse::<usize>() {
+            config.ffmpeg.max_parallel_processes = Some(value);
+        }
+    }
+
+    if let Ok(stderr_max) = std::env::var("AUDIO_ANALYZER_STDERR_MAX_BYTES") {
+        if let Ok(value) = stderr_max.parse::<usize>() {
+            config.ffmpeg.stderr_max_bytes = value;
+        }
+    }
+
+    if let Ok(max_files) = std::env::var("AUDIO_ANALYZER_MAX_FILES") {
+        if let Ok(value) = max_files.parse::<usize>() {
+            config.scan.max_files = Some(value);
+        }
+    }
+
+    if let Ok(max_depth) = std::env::var("AUDIO_ANALYZER_MAX_DEPTH") {
+        if let Ok(value) = max_depth.parse::<usize>() {
+            config.scan.max_depth = Some(value);
+        }
+    }
+
+    // 命令行参数覆盖环境变量与配置文件
     if matches.get_flag("verbose") {
         config.verbose = true;
     }
@@ -291,67 +363,16 @@ fn create_config_from_matches(matches: &clap::ArgMatches) -> Result<AnalyzerConf
         config.ffmpeg.stderr_max_bytes = stderr_max;
     }
 
-    // 从环境变量读取配置（优先级最低）
-    if !matches.get_flag("verbose") && !matches.get_flag("quiet") {
-        if let Ok(verbose) = std::env::var("AUDIO_ANALYZER_VERBOSE") {
-            config.verbose = verbose.eq_ignore_ascii_case("true") || verbose == "1";
-        }
-    }
-
-    if matches.get_one::<usize>("threads").is_none() {
-        if let Ok(threads) = std::env::var("AUDIO_ANALYZER_THREADS") {
-            if let Ok(num) = threads.parse::<usize>() {
-                config.num_threads = Some(num);
-            }
-        }
-    }
-
-    if matches.get_one::<u64>("ffmpeg-timeout").is_none() {
-        if let Ok(timeout) = std::env::var("AUDIO_ANALYZER_FFMPEG_TIMEOUT") {
-            if let Ok(timeout_seconds) = timeout.parse::<u64>() {
-                config.ffmpeg.timeout_seconds = Some(timeout_seconds);
-            }
-        }
-    }
-
-    if matches.get_one::<usize>("ffmpeg-max-procs").is_none() {
-        if let Ok(max_procs) = std::env::var("AUDIO_ANALYZER_FFMPEG_MAX_PROCS") {
-            if let Ok(value) = max_procs.parse::<usize>() {
-                config.ffmpeg.max_parallel_processes = Some(value);
-            }
-        }
-    }
-
-    if matches.get_one::<usize>("stderr-max-bytes").is_none() {
-        if let Ok(stderr_max) = std::env::var("AUDIO_ANALYZER_STDERR_MAX_BYTES") {
-            if let Ok(value) = stderr_max.parse::<usize>() {
-                config.ffmpeg.stderr_max_bytes = value;
-            }
-        }
-    }
-
-    if matches.get_one::<usize>("max-files").is_none() {
-        if let Ok(max_files) = std::env::var("AUDIO_ANALYZER_MAX_FILES") {
-            if let Ok(value) = max_files.parse::<usize>() {
-                config.scan.max_files = Some(value);
-            }
-        }
-    }
-
-    if matches.get_one::<usize>("max-depth").is_none() {
-        if let Ok(max_depth) = std::env::var("AUDIO_ANALYZER_MAX_DEPTH") {
-            if let Ok(value) = max_depth.parse::<usize>() {
-                config.scan.max_depth = Some(value);
-            }
-        }
-    }
-
     // 默认设置
     if !matches.get_flag("quiet") {
         config.show_progress = true;
     }
 
     Ok(config)
+}
+
+fn env_is_true(value: &str) -> bool {
+    value.eq_ignore_ascii_case("true") || value == "1"
 }
 
 /// 调用Python分析器生成最终报告
@@ -375,8 +396,20 @@ fn call_python_analyzer(
             )));
         }
 
-        let mut command = Command::new("python3");
-        command.arg(&script).arg(json_path).arg("-o").arg(csv_path);
+        let mut command = if script
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| ext.eq_ignore_ascii_case("py"))
+            .unwrap_or(false)
+        {
+            let mut cmd = Command::new("python3");
+            cmd.arg(&script);
+            cmd
+        } else {
+            Command::new(&script)
+        };
+
+        command.arg(json_path).arg("-o").arg(csv_path);
 
         let status = command.status()?;
 
@@ -391,6 +424,28 @@ fn call_python_analyzer(
             println!("✅ 指定 Python 脚本执行成功");
         }
         return Ok(());
+    }
+
+    if let Some(bundled_analyzer) = default_bundled_analyzer_path() {
+        let status = Command::new(&bundled_analyzer)
+            .arg(json_path)
+            .arg("-o")
+            .arg(csv_path)
+            .status()?;
+
+        if status.success() {
+            if !quiet {
+                println!("✅ 已使用打包分析器: {}", bundled_analyzer.display());
+            }
+            return Ok(());
+        }
+
+        if !quiet {
+            println!(
+                "⚠️  打包分析器执行失败（退出码: {:?}），尝试受信任 Python 脚本...",
+                status.code()
+            );
+        }
     }
 
     if let Some(trusted_script) = default_python_script_path() {
@@ -463,10 +518,25 @@ fn default_python_script_path() -> Option<PathBuf> {
     executable_script.filter(|p| p.exists())
 }
 
+fn default_bundled_analyzer_path() -> Option<PathBuf> {
+    let manifest_bundled = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("target")
+        .join("release")
+        .join("audio-analyzer-py");
+    if manifest_bundled.exists() {
+        return Some(manifest_bundled);
+    }
+
+    let executable_bundled = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|p| p.join("audio-analyzer-py")));
+    executable_bundled.filter(|p| p.exists())
+}
+
 /// 显示使用帮助
 #[allow(dead_code)]
 fn show_help() {
-    println!("音频质量分析器 v4.0");
+    println!("音频质量分析器 v{}", env!("CARGO_PKG_VERSION"));
     println!();
     println!("用法:");
     println!("  audio-analyzer [选项]");

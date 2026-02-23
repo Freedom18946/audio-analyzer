@@ -40,7 +40,7 @@ let results = analyzer.analyze_directory(&dir_path)?;
 
 ##### `initialize_dependencies(&mut self) -> Result<()>`
 
-初始化嵌入的依赖项（FFmpeg 和 Python 分析器）。
+初始化嵌入的依赖项（当前为 FFmpeg）。
 
 **注意:** 必须在进行任何分析操作之前调用此方法。
 

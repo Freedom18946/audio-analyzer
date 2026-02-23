@@ -5,7 +5,7 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 并且本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [4.0.1] - 2026-02-22
+## [4.0.1] - 2026-02-23
 
 ### 🔒 安全修复
 
@@ -36,6 +36,20 @@
 - 修复无 `pandas/numpy` 环境下的启动崩溃（`pd.errors` 访问异常）。
 - 修复无 `tqdm` fallback 下的 `desc` 未定义错误。
 - 增加无 pandas 的纯 Python 报告降级路径，保证可生成 CSV 结果。
+- `--show-incomplete` 与 `--show-stats` 参数现在实际生效。
+- 修复 `--min-score` 过滤后状态百分比统计口径，改为基于过滤后记录集计算。
+- 统一 Python 分析器版本标识为 `4.0.1`。
+
+### 🧩 CLI 与构建流程改进
+
+- 主程序现在支持“单文件”与“目录”两种输入路径模式，并在单文件模式下默认输出到文件所在目录。
+- 统一并明确配置优先级：`CLI > 环境变量 > 配置文件 > 默认值`。
+- 主程序优先调用同目录下的打包分析器 `audio-analyzer-py`，降低运行时 Python 环境要求。
+- 新增统一入口脚本 `scripts/quickstart.sh`，提供 `build/run/package` 一键流程。
+- 新增 GitHub Actions 工作流：`ci.yml`（格式/lint/test）与 `release.yml`（推送 `v*` 标签自动发布构建产物）。
+- 修复无效的 Cargo 目标 `rustflags` 配置，将 ARM64 优化迁移到 `.cargo/config.toml`。
+- 构建脚本不再清理或覆盖仓库内的 `audio-analyzer.spec`。
+- 发布打包流程新增 `jq` 依赖检查，缺失时给出明确错误提示。
 
 ## [4.0.0] - 2024-12-19
 

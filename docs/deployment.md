@@ -5,12 +5,13 @@
 ## 目录
 
 1. [构建准备](#构建准备)
-2. [UV 快捷部署](#uv-快捷部署)
-3. [本地构建](#本地构建)
-4. [CI/CD 集成](#cicd-集成)
-5. [发布流程](#发布流程)
-6. [部署环境](#部署环境)
-7. [故障排除](#故障排除)
+2. [一键快速部署](#一键快速部署)
+3. [UV 快捷部署](#uv-快捷部署)
+4. [本地构建](#本地构建)
+5. [CI/CD 集成](#cicd-集成)
+6. [发布流程](#发布流程)
+7. [部署环境](#部署环境)
+8. [故障排除](#故障排除)
 
 ## 构建准备
 
@@ -44,11 +45,31 @@ pip3 install -r requirements.txt
 pip3 install pyinstaller
 ```
 
+## 一键快速部署
+
+推荐使用统一入口脚本：
+
+```bash
+# 构建（自动处理 Python 依赖、Rust 编译、冒烟检查）
+./scripts/quickstart.sh build
+
+# 构建并运行
+./scripts/quickstart.sh run -- /path/to/music
+
+# 构建并打包 dist/*.tar.gz
+./scripts/quickstart.sh package
+```
+
+特点：
+- 单一命令入口，避免在 `build.sh` / `deploy-uv.sh` 之间切换。
+- 默认生成 `target/release/audio-analyzer-py`，主程序优先调用该打包分析器。
+- 支持 `--with-tests`、`--skip-py-analyzer`、`--force`、`--no-smoke` 等选项。
+
 ## UV 快捷部署
 
 ### 什么是 UV 快捷部署
 
-UV 是一个极快的 Python 包管理器，可以显著提升构建和部署速度。音频质量分析器 v4.0 集成了完整的 UV 支持。
+UV 是一个极快的 Python 包管理器，可以显著提升构建和部署速度。音频质量分析器 v4.0.1 集成了完整的 UV 支持。
 
 ### 一键部署
 
@@ -182,122 +203,31 @@ mkdir -p test_audio
 
 ## CI/CD 集成
 
-### GitHub Actions 配置
+### 已内置工作流
 
-创建 `.github/workflows/build.yml`：
+项目已提供两个可直接使用的工作流：
 
-```yaml
-name: Build and Test
+- `/.github/workflows/ci.yml`
+  - 触发：`push(main)`、`pull_request`
+  - 执行：`cargo fmt --check`、`cargo clippy -- -D warnings`、`cargo test --lib --tests --bins`、Python 语法校验
 
-on:
-  push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main ]
+- `/.github/workflows/release.yml`
+  - 触发：`push tags: v*`
+  - 平台：`macos-14`（ARM64）
+  - 执行：`./scripts/quickstart.sh package --no-smoke`
+  - 产物：`dist/*.tar.gz` 与 `dist/*.sha256` 自动上传到 GitHub Release
 
-jobs:
-  test:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        rust: [stable]
+### 自动发布使用方式
 
-    steps:
-    - uses: actions/checkout@v3
-    
-    - name: Install Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: ${{ matrix.rust }}
-        override: true
-        components: rustfmt, clippy
+```bash
+# 1) 打版本标签
+git tag -a v4.0.1 -m "Release version 4.0.1"
 
-    - name: Setup Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.9'
-
-    - name: Install Python dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pyinstaller
-
-    - name: Run tests
-      run: cargo test --verbose
-
-    - name: Run clippy
-      run: cargo clippy -- -D warnings
-
-    - name: Check formatting
-      run: cargo fmt -- --check
-
-    - name: Build release
-      run: cargo build --release --verbose
-
-    - name: Build Python analyzer
-      run: |
-        pyinstaller --onefile --name audio-analyzer src/bin/audio_analyzer.py
-        mkdir -p assets/binaries
-        cp dist/audio-analyzer assets/binaries/
-
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v3
-      with:
-        name: audio-analyzer-${{ matrix.os }}
-        path: |
-          target/release/audio-analyzer*
-          assets/binaries/audio-analyzer*
+# 2) 推送标签
+git push origin v4.0.1
 ```
 
-### 发布自动化
-
-创建 `.github/workflows/release.yml`：
-
-```yaml
-name: Release
-
-on:
-  push:
-    tags:
-      - 'v*'
-
-jobs:
-  release:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-          - os: macos-latest
-            target: x86_64-apple-darwin
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-
-    steps:
-    - uses: actions/checkout@v3
-    
-    - name: Install Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        target: ${{ matrix.target }}
-        override: true
-
-    - name: Build release
-      run: |
-        chmod +x scripts/build.sh
-        ./scripts/build.sh --package
-
-    - name: Create Release
-      uses: softprops/action-gh-release@v1
-      with:
-        files: releases/*.tar.gz
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-```
+推送后会自动触发 `release.yml`，无需手动上传附件。
 
 ## 发布流程
 
@@ -314,8 +244,8 @@ jobs:
 
 2. **创建发布标签**
    ```bash
-   git tag -a v4.0.0 -m "Release version 4.0.0"
-   git push origin v4.0.0
+   git tag -a v4.0.1 -m "Release version 4.0.1"
+   git push origin v4.0.1
    ```
 
 3. **生成变更日志**
@@ -425,10 +355,10 @@ ENTRYPOINT ["audio-analyzer"]
 
 ```bash
 # 构建镜像
-docker build -t audio-analyzer:v4.0.0 .
+docker build -t audio-analyzer:v4.0.1 .
 
 # 运行容器
-docker run -v /path/to/audio:/data audio-analyzer:v4.0.0 /data
+docker run -v /path/to/audio:/data audio-analyzer:v4.0.1 /data
 ```
 
 ### 系统服务部署

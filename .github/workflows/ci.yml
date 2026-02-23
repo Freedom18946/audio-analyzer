@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Rust And Python Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust Artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Rust Format Check
+        run: cargo fmt --check
+
+      - name: Rust Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Rust Tests
+        run: cargo test --lib --tests --bins
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Python Syntax Check
+        run: python -m py_compile src/bin/audio_analyzer.py
